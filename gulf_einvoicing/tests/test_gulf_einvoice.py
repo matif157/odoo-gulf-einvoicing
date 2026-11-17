@@ -27,12 +27,11 @@ class TestGulfEinvoice(AccountTestInvoicingCommon):
         super().setUpClass()
         cls.company = cls.company_data["company"]
         # A CI database created with --without-demo has no chart of accounts,
-        # which means no journals, no taxes and no receivable account. Load the
-        # Saudi chart so the tests run against the same accounting model a real
-        # ZATCA customer uses.
+        # which means no journals, no taxes and no receivable account. Load a
+        # standard chart so invoices can be created at all.
         if not cls.company.chart_template:
             cls.env["account.chart.template"].try_loading(
-                "sa", cls.company, install_demo=False
+                "us", cls.company, install_demo=False
             )
             cls.company_data = cls.collect_company_accounting_data(cls.company)
         cls.company.write(

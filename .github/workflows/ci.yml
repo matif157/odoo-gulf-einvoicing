@@ -54,7 +54,7 @@ jobs:
         run: |
           odoo -d testdb \
             --db_host=db --db_user=odoo --db_password=odoo \
-            -i gulf_einvoicing,l10n_sa \
+            -i gulf_einvoicing,l10n_us \
             --test-tags /gulf_einvoicing \
             --stop-after-init \
             --without-demo=all
