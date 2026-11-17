@@ -2,125 +2,62 @@
 
 import base64
 import xml.etree.ElementTree as ET
-from datetime import date
 
+from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
 
 from ..lib import ubl, zatca_qr
 
 CBC = "{%s}" % ubl.CBC_NS
 CAC = "{%s}" % ubl.CAC_NS
 
+SAUDI_VAT = "300000000000003"
 
-class TestGulfEinvoice(TransactionCase):
+
+class TestGulfEinvoice(AccountTestInvoicingCommon):
+    """End-to-end tests through ``account.move``.
+
+    Uses Odoo's own accounting test mixin so a real chart of accounts, journals,
+    taxes and payment terms exist. Building those by hand is how test suites
+    become unmaintainable.
+    """
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.env = cls.env(context=dict(cls.env.context, tracking_disable=True))
-
-        cls.sa = cls.env.ref("base.sa")
-        cls.company = cls.env.company
-        # Odoo 19 requires account.tax.country_id (NOT NULL) and refuses a tax
-        # whose country differs from the company fiscal country. So the company
-        # is fiscal-Saudi and every test tax is Saudi too.
+        cls.company = cls.company_data["company"]
         cls.company.write(
             {
-                "name": "Al Noor Trading Est.",
-                "vat": "300000000000003",
+                "vat": SAUDI_VAT,
                 "gulf_cr_number": "1010101010",
                 "gulf_einvoicing_enabled": True,
-                "account_fiscal_country_id": cls.sa.id,
-            }
-        )
-
-        cls.income_account = cls.env["account.account"].search(
-            [("account_type", "=", "income")], limit=1
-        )
-        if not cls.income_account:
-            cls.income_account = cls.env["account.account"].create(
-                {
-                    "name": "Test Income",
-                    "code": "999999",
-                    "account_type": "income",
-                }
-            )
-
-        cls.journal = cls.env["account.journal"].search(
-            [("type", "=", "sale")], limit=1
-        )
-        if not cls.journal:
-            cls.journal = cls.env["account.journal"].create(
-                {
-                    "name": "Test Sales",
-                    "code": "TSAL",
-                    "type": "sale",
-                    "default_account_id": cls.income_account.id,
-                }
-            )
-
-        cls.purchase_journal = cls.env["account.journal"].search(
-            [("type", "=", "purchase")], limit=1
-        )
-        if not cls.purchase_journal:
-            cls.purchase_journal = cls.env["account.journal"].create(
-                {
-                    "name": "Test Purchases",
-                    "code": "TPUR",
-                    "type": "purchase",
-                    "default_account_id": cls.income_account.id,
-                }
-            )
-
-        cls.tax_group = cls.env["account.tax.group"].create(
-            {"name": "VAT", "country_id": cls.sa.id}
-        )
-        cls.tax = cls.env["account.tax"].create(
-            {
-                "name": "VAT 15%",
-                "amount": 15.0,
-                "amount_type": "percent",
-                "type_tax_use": "sale",
-                "tax_group_id": cls.tax_group.id,
-                "country_id": cls.sa.id,
-            }
-        )
-
-        cls.partner = cls.env["res.partner"].create(
-            {
-                "name": "Gulf Contracting Co.",
-                "vat": "310000000000003",
-                "city": "Jeddah",
-                "country_id": cls.sa.id,
             }
         )
         cls.walk_in = cls.env["res.partner"].create(
             {"name": "Walk-in Customer", "city": "Riyadh"}
         )
+        cls.business_customer = cls.env["res.partner"].create(
+            {
+                "name": "Gulf Contracting Co.",
+                "vat": "310000000000003",
+                "city": "Jeddah",
+            }
+        )
 
+    # ------------------------------------------------------------------
+    # Fixtures
+    # ------------------------------------------------------------------
     def _invoice(self, partner=None, **kwargs):
-        vals = {
-            "move_type": "out_invoice",
-            "partner_id": (partner or self.partner).id,
-            "journal_id": self.journal.id,
-            "invoice_date": date(2026, 11, 17),
-            "invoice_date_due": date(2026, 12, 17),
-            "invoice_line_ids": [
-                (
-                    0,
-                    0,
-                    {
-                        "name": "Steel pipe 2 inch",
-                        "quantity": 10,
-                        "price_unit": 100.0,
-                        "tax_ids": [(6, 0, [self.tax.id])],
-                        "account_id": self.income_account.id,
-                    },
-                )
-            ],
-        }
-        vals.update(kwargs)
-        return self.env["account.move"].create(vals)
+        return self._create_invoice_one_line(
+            price_unit=1000.0,
+            tax_ids=self.company_data["default_tax_sale"],
+            partner_id=partner or self.business_customer,
+            invoice_date="2026-11-17",
+            **kwargs,
+        )
+
+    def _xml_root(self, invoice):
+        return ET.fromstring(base64.b64decode(invoice.gulf_einvoice_xml))
 
     # ------------------------------------------------------------------
     # Generation
@@ -135,61 +72,69 @@ class TestGulfEinvoice(TransactionCase):
         self.assertTrue(invoice.gulf_einvoice_xml)
         self.assertTrue(invoice.gulf_einvoice_filename.endswith(".xml"))
 
-    def test_qr_payload_is_valid(self):
+    def test_qr_payload_matches_invoice(self):
         invoice = self._invoice()
         invoice.action_generate_gulf_einvoice()
         fields = zatca_qr.parse_payload(invoice.gulf_einvoice_qr)
-        self.assertEqual(fields["seller_name"], "Al Noor Trading Est.")
-        self.assertEqual(fields["vat_number"], "300000000000003")
-        self.assertEqual(fields["total_with_vat"], "1150.00")
-        self.assertEqual(fields["vat_total"], "150.00")
+        self.assertEqual(fields["seller_name"], self.company.name)
+        self.assertEqual(fields["vat_number"], SAUDI_VAT)
+        self.assertEqual(
+            fields["total_with_vat"], zatca_qr.format_amount(invoice.amount_total)
+        )
+        self.assertEqual(fields["vat_total"], zatca_qr.format_amount(invoice.amount_tax))
+
+    def test_qr_passes_own_validator(self):
+        invoice = self._invoice()
+        invoice.action_generate_gulf_einvoice()
         self.assertEqual(zatca_qr.validate_payload(invoice.gulf_einvoice_qr), [])
 
     def test_ubl_is_well_formed(self):
         invoice = self._invoice()
         invoice.action_generate_gulf_einvoice()
-        xml_bytes = base64.b64decode(invoice.gulf_einvoice_xml)
-        root = ET.fromstring(xml_bytes)
+        root = self._xml_root(invoice)
         self.assertTrue(root.tag.endswith("Invoice"))
         self.assertEqual(root.findtext(CBC + "ID"), invoice.name)
 
-    def test_ubl_contains_uuid_and_qr(self):
+    def test_ubl_uuid_matches_record(self):
         invoice = self._invoice()
         invoice.action_generate_gulf_einvoice()
-        root = ET.fromstring(base64.b64decode(invoice.gulf_einvoice_xml))
+        root = self._xml_root(invoice)
         self.assertEqual(root.findtext(CBC + "UUID"), invoice.gulf_einvoice_uuid)
-        found_qr = False
+
+    def test_ubl_embeds_the_same_qr(self):
+        invoice = self._invoice()
+        invoice.action_generate_gulf_einvoice()
+        root = self._xml_root(invoice)
+        found = False
         for ref in root.findall(CAC + "AdditionalDocumentReference"):
             if ref.findtext(CBC + "ID") == "QR":
-                found_qr = True
-                self.assertEqual(
-                    ref.find(CAC + "Attachment").findtext(
-                        CBC + "EmbeddedDocumentBinaryObject"
-                    ),
-                    invoice.gulf_einvoice_qr,
+                found = True
+                value = ref.find(CAC + "Attachment").findtext(
+                    CBC + "EmbeddedDocumentBinaryObject"
                 )
-        self.assertTrue(found_qr)
+                self.assertEqual(value, invoice.gulf_einvoice_qr)
+        self.assertTrue(found, "QR reference missing from the UBL document")
 
     def test_standard_type_code(self):
         invoice = self._invoice()
         invoice.gulf_einvoice_type = "standard"
         invoice.action_generate_gulf_einvoice()
-        root = ET.fromstring(base64.b64decode(invoice.gulf_einvoice_xml))
+        root = self._xml_root(invoice)
         self.assertEqual(root.find(CBC + "InvoiceTypeCode").get("name"), "0100000")
 
     def test_simplified_type_code(self):
         invoice = self._invoice(partner=self.walk_in)
         invoice.gulf_einvoice_type = "simplified"
         invoice.action_generate_gulf_einvoice()
-        root = ET.fromstring(base64.b64decode(invoice.gulf_einvoice_xml))
+        root = self._xml_root(invoice)
         self.assertEqual(root.find(CBC + "InvoiceTypeCode").get("name"), "0200000")
 
-    def test_regeneration_replaces_values(self):
+    def test_regeneration_changes_uuid(self):
         invoice = self._invoice()
         invoice.action_generate_gulf_einvoice()
-        first_uuid = invoice.gulf_einvoice_uuid
+        first = invoice.gulf_einvoice_uuid
         invoice.action_generate_gulf_einvoice()
-        self.assertNotEqual(invoice.gulf_einvoice_uuid, first_uuid)
+        self.assertNotEqual(invoice.gulf_einvoice_uuid, first)
 
     def test_reset_clears_everything(self):
         invoice = self._invoice()
@@ -209,26 +154,11 @@ class TestGulfEinvoice(TransactionCase):
             invoice.action_generate_gulf_einvoice()
 
     def test_vendor_bill_raises(self):
-        bill = self.env["account.move"].create(
-            {
-                "move_type": "in_invoice",
-                "partner_id": self.partner.id,
-                "journal_id": self.purchase_journal.id,
-                "invoice_date": date(2026, 11, 17),
-                "invoice_date_due": date(2026, 12, 17),
-                "invoice_line_ids": [
-                    (
-                        0,
-                        0,
-                        {
-                            "name": "Purchase",
-                            "quantity": 1,
-                            "price_unit": 100.0,
-                            "account_id": self.income_account.id,
-                        },
-                    )
-                ],
-            }
+        bill = self._create_invoice_one_line(
+            price_unit=100.0,
+            partner_id=self.business_customer,
+            move_type="in_invoice",
+            invoice_date="2026-11-17",
         )
         with self.assertRaises(UserError):
             bill.action_generate_gulf_einvoice()
@@ -239,7 +169,7 @@ class TestGulfEinvoice(TransactionCase):
         with self.assertRaises(UserError):
             invoice.action_generate_gulf_einvoice()
 
-    def test_error_message_lists_all_problems(self):
+    def test_error_message_names_the_missing_field(self):
         self.company.vat = False
         invoice = self._invoice()
         with self.assertRaises(UserError) as caught:
@@ -249,8 +179,12 @@ class TestGulfEinvoice(TransactionCase):
     # ------------------------------------------------------------------
     # Onchange
     # ------------------------------------------------------------------
-    def test_onchange_sets_simplified_for_walk_in(self):
-        invoice = self.env["account.move"].new({"move_type": "out_invoice"})
-        invoice.partner_id = self.walk_in
+    def test_onchange_uses_standard_for_business_customer(self):
+        invoice = self._invoice()
+        invoice._onchange_partner_set_einvoice_type()
+        self.assertEqual(invoice.gulf_einvoice_type, "standard")
+
+    def test_onchange_uses_simplified_for_walk_in(self):
+        invoice = self._invoice(partner=self.walk_in)
         invoice._onchange_partner_set_einvoice_type()
         self.assertEqual(invoice.gulf_einvoice_type, "simplified")
