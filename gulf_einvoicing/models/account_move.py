@@ -122,7 +122,9 @@ class AccountMove(models.Model):
         return {
             "name": partner.name or fallback_name or "",
             "vat": partner.vat or "",
-            "crn": partner.company_registry or "",
+            # Odoo 20 removed res.partner.company_registry; keep this defensive
+            # so the same file runs on 19 and 20.
+            "crn": getattr(partner, "company_registry", False) or "",
             "street": partner.street or partner.name or "",
             "building": getattr(partner, "street_number", False) or "0000",
             "additional": partner.street2 or "",
