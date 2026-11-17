@@ -66,7 +66,15 @@ class TestGulfEinvoice(AccountTestInvoicingCommon):
         )
 
     def _xml_root(self, invoice):
-        return ET.fromstring(base64.b64decode(invoice.gulf_einvoice_xml))
+        return ET.fromstring(self._xml_bytes(invoice))
+
+    @staticmethod
+    def _xml_bytes(invoice):
+        """Read the XML on both Odoo 19 (base64 bytes) and 20 (BinaryValue)."""
+        value = invoice.gulf_einvoice_xml
+        if hasattr(value, "content"):
+            return value.content
+        return base64.b64decode(value)
 
     # ------------------------------------------------------------------
     # Generation

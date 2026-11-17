@@ -195,7 +195,11 @@ class AccountMove(models.Model):
                 {
                     "gulf_einvoice_uuid": invoice_uuid,
                     "gulf_einvoice_qr": payload,
-                    "gulf_einvoice_xml": base64.b64encode(xml_text.encode("utf-8")),
+                    # A base64 *string* is the only value both 19 and 20 accept:
+                    # Odoo 20 rejects raw bytes ("use BinaryValue instead").
+                    "gulf_einvoice_xml": base64.b64encode(
+                        xml_text.encode("utf-8")
+                    ).decode("ascii"),
                     "gulf_einvoice_filename": "%s.xml" % safe_name,
                     "gulf_einvoice_generated_on": fields.Datetime.now(),
                     "gulf_einvoice_state": "generated",
