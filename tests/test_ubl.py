@@ -178,6 +178,24 @@ class TestOutput(unittest.TestCase):
         self.assertGreater(len(text), 1000)
         ET.fromstring(text.split("?>", 1)[1])
 
+    def test_float_inputs_are_supported(self):
+        """Odoo's monetary fields are floats; float + Decimal raises TypeError."""
+        data = dict(DATA)
+        data["lines"] = [
+            dict(
+                DATA["lines"][0],
+                unit_price=100.0,
+                line_extension=1000.0,
+                vat_amount=150.0,
+            )
+        ]
+        root = parse(data)
+        line = root.find(CAC + "InvoiceLine")
+        self.assertEqual(line.findtext(CBC + "LineExtensionAmount"), "1000.00")
+        self.assertEqual(
+            line.find(CAC + "TaxTotal").findtext(CBC + "RoundingAmount"), "1150.00"
+        )
+
     def test_decimal_precision_is_two_places(self):
         data = dict(DATA)
         data["lines"] = [

@@ -65,6 +65,19 @@ def _sub(parent, tag, text=None, **attrs):
     return element
 
 
+def _dec(value) -> Decimal:
+    """Coerce anything numeric (including Odoo's float monetary fields) to Decimal.
+
+    ``float + Decimal`` raises TypeError, so every incoming value goes through
+    ``str()`` first. This is the bug that only appears once real Odoo records
+    are passed in, not hand-written test dicts.
+    """
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError) as exc:
+        raise UblError("Invalid monetary value: %r" % (value,)) from exc
+
+
 def money(value) -> str:
     try:
         amount = Decimal(str(value))
@@ -175,8 +188,8 @@ def build_invoice(data: dict) -> str:
     line_extension_total = Decimal("0")
     vat_total = Decimal("0")
     for line in lines:
-        line_extension_total += Decimal(money(line["line_extension"]))
-        vat_total += Decimal(money(line["vat_amount"]))
+        line_extension_total += _dec(line["line_extension"])
+        vat_total += _dec(line["vat_amount"])
 
     tax_amount = money(data.get("tax_amount", vat_total))
 
@@ -244,7 +257,10 @@ def build_invoice(data: dict) -> str:
 
         line_tax = _sub(node, "cac:TaxTotal")
         _sub(line_tax, "cbc:TaxAmount", money(line["vat_amount"]), currencyID=currency)
-        _sub(line_tax, "cbc:RoundingAmount", money(line.get("rounding_amount", line["line_extension"] + Decimal(money(line["vat_amount"])))), currencyID=currency)
+        rounding = line.get("rounding_amount")
+        if rounding is None:
+            rounding = _dec(line["line_extension"]) + _dec(line["vat_amount"])
+        _sub(line_tax, "cbc:RoundingAmount", money(rounding), currencyID=currency)
 
         item = _sub(node, "cac:Item")
         _sub(item, "cbc:Name", _require(line, "name", "line"))
