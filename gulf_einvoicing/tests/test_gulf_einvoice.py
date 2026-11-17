@@ -54,12 +54,10 @@ class TestGulfEinvoice(TransactionCase):
                 }
             )
 
-        cls.tax_group = cls.env["account.tax.group"].create(
-            {
-                "name": "VAT",
-                "country_id": cls.env.ref("base.sa").id,
-            }
-        )
+        # No country on the tax: Odoo 19 rejects a tax whose country does not
+        # match the company fiscal country. A country-less tax is generic and
+        # valid everywhere, which keeps this test independent of the chart.
+        cls.tax_group = cls.env["account.tax.group"].create({"name": "VAT"})
         cls.tax = cls.env["account.tax"].create(
             {
                 "name": "VAT 15%",
@@ -67,7 +65,6 @@ class TestGulfEinvoice(TransactionCase):
                 "amount_type": "percent",
                 "type_tax_use": "sale",
                 "tax_group_id": cls.tax_group.id,
-                "country_id": cls.env.ref("base.sa").id,
             }
         )
 
