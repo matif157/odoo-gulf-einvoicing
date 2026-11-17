@@ -19,13 +19,18 @@ class TestGulfEinvoice(TransactionCase):
         super().setUpClass()
         cls.env = cls.env(context=dict(cls.env.context, tracking_disable=True))
 
+        cls.sa = cls.env.ref("base.sa")
         cls.company = cls.env.company
+        # Odoo 19 requires account.tax.country_id (NOT NULL) and refuses a tax
+        # whose country differs from the company fiscal country. So the company
+        # is fiscal-Saudi and every test tax is Saudi too.
         cls.company.write(
             {
                 "name": "Al Noor Trading Est.",
                 "vat": "300000000000003",
                 "gulf_cr_number": "1010101010",
                 "gulf_einvoicing_enabled": True,
+                "account_fiscal_country_id": cls.sa.id,
             }
         )
 
@@ -54,10 +59,9 @@ class TestGulfEinvoice(TransactionCase):
                 }
             )
 
-        # No country on the tax: Odoo 19 rejects a tax whose country does not
-        # match the company fiscal country. A country-less tax is generic and
-        # valid everywhere, which keeps this test independent of the chart.
-        cls.tax_group = cls.env["account.tax.group"].create({"name": "VAT"})
+        cls.tax_group = cls.env["account.tax.group"].create(
+            {"name": "VAT", "country_id": cls.sa.id}
+        )
         cls.tax = cls.env["account.tax"].create(
             {
                 "name": "VAT 15%",
@@ -65,6 +69,7 @@ class TestGulfEinvoice(TransactionCase):
                 "amount_type": "percent",
                 "type_tax_use": "sale",
                 "tax_group_id": cls.tax_group.id,
+                "country_id": cls.sa.id,
             }
         )
 
@@ -73,7 +78,7 @@ class TestGulfEinvoice(TransactionCase):
                 "name": "Gulf Contracting Co.",
                 "vat": "310000000000003",
                 "city": "Jeddah",
-                "country_id": cls.env.ref("base.sa").id,
+                "country_id": cls.sa.id,
             }
         )
         cls.walk_in = cls.env["res.partner"].create(
