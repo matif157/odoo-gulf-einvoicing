@@ -26,12 +26,13 @@ class TestGulfEinvoice(AccountTestInvoicingCommon):
     def setUpClass(cls):
         super().setUpClass()
         cls.company = cls.company_data["company"]
-        # A CI database created with --without-demo has no chart of accounts,
-        # which means no journals, no taxes and no receivable account. Load a
-        # standard chart so invoices can be created at all.
+        # A database created with --without-demo has no chart of accounts: no
+        # journals, no taxes, no receivable account. ``generic_coa`` ships inside
+        # the ``account`` module itself, so this never tries to install a module
+        # (which Odoo forbids while the registry is loading).
         if not cls.company.chart_template:
             cls.env["account.chart.template"].try_loading(
-                "us", cls.company, install_demo=False
+                "generic_coa", cls.company, install_demo=False
             )
             cls.company_data = cls.collect_company_accounting_data(cls.company)
         cls.company.write(
