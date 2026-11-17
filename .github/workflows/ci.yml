@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Fast job: the compliance library has no Odoo dependency.
+  library-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install QR dependency
+        run: pip install "qrcode[pil]"
+      - name: Run pure-Python tests
+        run: python -m unittest discover -s tests -t tests -v
+
+  # Slow job: the full Odoo module against a real database.
+  odoo-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: odoo:19.0
+      options: --user root
+
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Link module into the addons path
+        run: |
+          mkdir -p /mnt/extra-addons
+          ln -sfn "$GITHUB_WORKSPACE/gulf_einvoicing" /mnt/extra-addons/gulf_einvoicing
+
+      - name: Run module tests
+        run: |
+          odoo -d testdb \
+            --db_host=db --db_user=odoo --db_password=odoo \
+            -i gulf_einvoicing \
+            --test-tags /gulf_einvoicing \
+            --stop-after-init \
+            --without-demo=all

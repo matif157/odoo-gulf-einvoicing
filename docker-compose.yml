@@ -1,0 +1,44 @@
+# Tuned for an 8 GB machine: one worker, hard memory ceiling.
+# Prefer a native install (see README) if Docker Desktop alone eats 2 GB of your RAM.
+
+services:
+  db:
+    image: postgres:16
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=20"]
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  odoo:
+    image: odoo:19.0
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8069:8069"
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      - ./gulf_einvoicing:/mnt/extra-addons/gulf_einvoicing
+      - odoo-web-data:/var/lib/odoo
+    command:
+      - odoo
+      - --workers=0
+      - --limit-memory-soft=320000000
+      - --limit-memory-hard=400000000
+      - --max-cron-threads=1
+      - --dev=all
+
+volumes:
+  odoo-db-data:
+  odoo-web-data:

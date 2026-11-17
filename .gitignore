@@ -1,0 +1,35 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Odoo runtime
+*.log
+.odoorc
+odoo.conf
+filestore/
+sessions/
+
+# Local database / docker
+pgdata/
+*.sql
+*.dump
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Distribution
+build/
+dist/
+*.egg-info/
+
+# Generated output
+*.xml.out
