@@ -54,12 +54,20 @@ class TestGulfEinvoice(TransactionCase):
                 }
             )
 
+        cls.tax_group = cls.env["account.tax.group"].create(
+            {
+                "name": "VAT",
+                "country_id": cls.env.ref("base.sa").id,
+            }
+        )
         cls.tax = cls.env["account.tax"].create(
             {
                 "name": "VAT 15%",
                 "amount": 15.0,
                 "amount_type": "percent",
                 "type_tax_use": "sale",
+                "tax_group_id": cls.tax_group.id,
+                "country_id": cls.env.ref("base.sa").id,
             }
         )
 
