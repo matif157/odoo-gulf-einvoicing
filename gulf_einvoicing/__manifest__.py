@@ -1,6 +1,6 @@
 {
     "name": "Gulf E-Invoicing (ZATCA / UBL)",
-    "version": "19.0.1.0.0",
+    "version": "20.0.1.0.0",
     "category": "Accounting/Localizations",
     "summary": "ZATCA Phase 1 QR codes and UBL 2.1 e-invoice XML for Saudi Arabia and the Gulf",
     "description": """

@@ -147,7 +147,9 @@ unit-tested in under a second and reused by any Python system.
 
 ## Compatibility
 
-- Odoo 19.0 Community (Enterprise works too)
+- **Branch `20.0` → Odoo 20.0** (this branch)
+- Branch `main` → Odoo 19.0
+- Community and Enterprise both work
 - PostgreSQL 13+
 - Python 3.10+
 - No external service, no API key, no paid dependency
