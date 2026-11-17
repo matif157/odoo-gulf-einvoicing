@@ -59,6 +59,19 @@ class TestGulfEinvoice(TransactionCase):
                 }
             )
 
+        cls.purchase_journal = cls.env["account.journal"].search(
+            [("type", "=", "purchase")], limit=1
+        )
+        if not cls.purchase_journal:
+            cls.purchase_journal = cls.env["account.journal"].create(
+                {
+                    "name": "Test Purchases",
+                    "code": "TPUR",
+                    "type": "purchase",
+                    "default_account_id": cls.income_account.id,
+                }
+            )
+
         cls.tax_group = cls.env["account.tax.group"].create(
             {"name": "VAT", "country_id": cls.sa.id}
         )
@@ -91,6 +104,7 @@ class TestGulfEinvoice(TransactionCase):
             "partner_id": (partner or self.partner).id,
             "journal_id": self.journal.id,
             "invoice_date": date(2026, 11, 17),
+            "invoice_date_due": date(2026, 12, 17),
             "invoice_line_ids": [
                 (
                     0,
@@ -199,7 +213,9 @@ class TestGulfEinvoice(TransactionCase):
             {
                 "move_type": "in_invoice",
                 "partner_id": self.partner.id,
+                "journal_id": self.purchase_journal.id,
                 "invoice_date": date(2026, 11, 17),
+                "invoice_date_due": date(2026, 12, 17),
                 "invoice_line_ids": [
                     (
                         0,
