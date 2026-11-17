@@ -102,7 +102,8 @@ class TestGulfEinvoice(AccountTestInvoicingCommon):
         invoice.action_generate_gulf_einvoice()
         root = self._xml_root(invoice)
         self.assertTrue(root.tag.endswith("Invoice"))
-        self.assertEqual(root.findtext(CBC + "ID"), invoice.name)
+        expected = invoice.name or "DRAFT/%s" % invoice.id
+        self.assertEqual(root.findtext(CBC + "ID"), expected)
 
     def test_ubl_uuid_matches_record(self):
         invoice = self._invoice()

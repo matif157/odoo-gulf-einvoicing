@@ -162,7 +162,9 @@ class AccountMove(models.Model):
         seller["crn"] = company.gulf_cr_number or company.company_registry or ""
 
         return {
-            "invoice_id": self.name,
+            # A draft invoice has no number yet; ZATCA needs a value in cbc:ID,
+            # so fall back to a placeholder that is regenerated once posted.
+            "invoice_id": self.name or ("DRAFT/%s" % self.id),
             "uuid": invoice_uuid,
             "issue_date": self._gulf_issue_date(),
             "issue_time": fields.Datetime.now().strftime("%H:%M:%S"),
